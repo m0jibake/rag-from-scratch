@@ -1,4 +1,5 @@
 import os
+import numpy as np
 from typing import List
 from openai import AzureOpenAI
 from dotenv import load_dotenv
@@ -21,15 +22,12 @@ class OpenAiEmbeddings:
             azure_endpoint= azure_endpoint,
             api_version = api_version,
             )
-    def embed(self, text: str) -> List[float]:
+
+    def embed(self, text: str) -> List[np.ndarray]:
         return self.client.embeddings.create(input = [text], model=MODEL ).data[0].embedding
-
-
-
-
-
-
-
-print(
-OpenAiEmbeddings(api_key = API_KEY, azure_endpoint= BASE_URL, api_version = API_VERSION,).embed(text)
-)
+    
+    def embed_batch(self, texts: list[str]):
+        embeddings = []
+        for text in texts:
+            embeddings.append(self.embed(text))
+        return embeddings

@@ -26,7 +26,7 @@ class SimpleVectorStore:
 
     def add(self, vector: Vector) -> None:
         if len(vector.vector) != self.num_vector_dimensions:
-            raise ValueError(f"Error: Provided vector doesn't have the right length. The vector store is configured for vectors of length {self.num_vector_dimensions} but the provided vector has length {len(vector)}")
+            raise ValueError(f"Error: Provided vector doesn't have the right length. The vector store is configured for vectors of length {self.num_vector_dimensions} but the provided vector has length {len(vector.vector)}")
 
         self.vectors.append(vector)
         
