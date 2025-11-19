@@ -1,13 +1,18 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 import uuid
+import numpy as np
+from numpy.linalg import norm
+import operator
+
 
 
 
 class Vector(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     vector_id: str = Field(default_factory=lambda: str(uuid.uuid1()))
-    # document_id: str
-    vector: list[float]
-    # text: str
+    vector: np.ndarray
+    document_id: str
+    text: str
 
 class Document(BaseModel):
     text: str
@@ -18,39 +23,53 @@ class SimpleVectorStore:
     def __init__(self, num_vector_dimensions) -> None:
         self.num_vector_dimensions = num_vector_dimensions
         self.vectors: list[Vector] = []
-        # self.vector_metadata
 
     def add(self, vector: Vector) -> None:
-        if len(vector.vector) > self.num_vector_dimensions:
-            raise ValueError(f"Error: Provided vector is too long. The vector store is configured for vectors of length {self.num_vector_dimensions} but the provided vector has length {len(vector)}")
-        elif len(vector.vector) < self.num_vector_dimensions:    
-            raise ValueError(f"Error: Provided vector is too short. The vector store is configured for vectors of length {self.num_vector_dimensions} but the provided vector has length {len(vector)}")
+        if len(vector.vector) != self.num_vector_dimensions:
+            raise ValueError(f"Error: Provided vector doesn't have the right length. The vector store is configured for vectors of length {self.num_vector_dimensions} but the provided vector has length {len(vector)}")
 
         self.vectors.append(vector)
         
     def delete(self, vector_id: str):
         self.vectors = [vec for vec in self.vectors if vec.vector_id != vector_id]
 
-    def retrieve(self, vector_id: str) -> list[Vector]:
-        return [vec for vec in self.vectors if vec.vector_id == vector_id]
+    def retrieve(self, vector_id: str) -> Vector | None:
+        for vec in self.vectors:
+            if vec.vector_id == vector_id:
+                return vec
+        return None
     
     def count(self)-> int:
         return len(self.vectors)
     
-    def search():
-        raise NotImplementedError   
+    def search(self, query_vector: np.ndarray, k: int) -> list[tuple[Vector, float]]:
+        if len(query_vector) != self.num_vector_dimensions:
+            raise ValueError(f"Query vector must be of length {self.num_vector_dimensions}, but is of length {len(query_vector)}")
+
+        q_norm = norm(query_vector) + 1e-10
+
+        cosine_store = []
+        for vector in self.vectors:
+            v_norm = norm(vector.vector) + 1e-10
+            cosine = float(np.dot(query_vector, vector.vector) / (norm(q_norm) * norm(v_norm)) )
+            cosine_store.append((vector, cosine))
+        cosine_store.sort(key=lambda x: x[1], reverse=True)
+
+        return cosine_store[:k]
+        
     
 
 
-if __name__ == "__main__"
-    vector = Vector(vector_id="111", vector=[1,2,3])
+if __name__ == "__main__":
+    vector1 = Vector(vector_id="111", vector=np.array([1,2,3]), document_id="123", text="hi")
+    vector2 = Vector(vector_id="222", vector=np.array([100,200,300]), document_id="456", text="animal")
     vs = SimpleVectorStore(num_vector_dimensions=3)
 
-    print(vs.count())
-    vs.add(vector)
-    print(vs.count())
-    vs.delete("111")
-    print(vs.count())
+
+    vs.add(vector1)
+    vs.add(vector2)
+    print(vs.search(np.array([1,2,4]), 1))
+
 
 
 
