@@ -10,3 +10,5 @@ wheels/
 .venv
 
 .env
+src/playground.py
+src/rag-from-scratch.ipynb
