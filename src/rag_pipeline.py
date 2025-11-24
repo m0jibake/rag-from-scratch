@@ -5,6 +5,7 @@ from openai import AzureOpenAI
 from src.embeddings import OpenAiEmbeddings
 from src.vector_stores import SimpleVectorStore, Vector, SimilarityScore
 from src.splitter import SimpleCharacterSplitter, Splitter
+from src.file_loader import TextFileLoader, Document, FileFactory
 from dotenv import load_dotenv
 
 
@@ -31,7 +32,9 @@ class ContextFormatter:
         organized_chunks = "Here are text chunks sorted in descending order by relevancy to the user prompt:"
         
         for i, chunk in enumerate(chunks):
-            organized_chunks += f"Chunk {i}: {chunk.vector.text} \n"
+            page_info = f"Page {chunk.vector.metadata.page_number}" if chunk.vector.metadata.page_number else "N/A"
+            relevancy_pct = f"{chunk.similarity_score * 100:.0f}%"
+            organized_chunks += f"Chunk {i} ({chunk.vector.metadata.file_name}, Page: {page_info}, Relevancy: {relevancy_pct}): {chunk.vector.text} \n"
         return organized_chunks
     
 class Llm:
@@ -53,7 +56,7 @@ class PromptBuilder:
     def __init__(self, context: str, user_query: str):
         self.system_prompt = """
             You are a helpful assistant. Answer based on the provided context.
-            If the context doesn't contain relevant information, say so.
+            If the context doesn't contain relevant information, say so. But be flexible and expand on your trained knowledge, if applicable.
             """
         self.context = context
         self.user_query = user_query
@@ -81,14 +84,15 @@ class RagPipeline:
         self.splitter = splitter
         self.k = k
 
-    def add_documents(self, documents: list[str]):
+    def add_documents(self, files: list[str]):
 
-        for doc in documents:
-
-            chunks = self.splitter.split(doc)
-            for chunk in chunks:
-                vector = Vector(vector_id=str(uuid.uuid1()), vector=np.array(self.embedder.embed(chunk)), document_id=str(uuid.uuid1()), text=chunk)
-                self.vector_store.add(vector)
+        for file in files:
+            documents = FileFactory().get_loader(file).load()
+            for document in documents:
+                chunks = self.splitter.split(document.text)
+                for chunk in chunks:
+                    vector = Vector(vector_id=str(uuid.uuid1()), vector=np.array(self.embedder.embed(chunk)), document_id=document.document_id, text=chunk, metadata=document.metadata)
+                    self.vector_store.add(vector)
 
     def query_rag(self, user_query: str, model: str):
     
@@ -107,14 +111,12 @@ if __name__ == "__main__":
     BASE_URL = os.getenv("AZURE_OPENAI_ENDPOINT")
 
     user_query = "What is your name? Also what is the biggest mountain on Schwäbische Alb?"
+    user_query = "give a summary of the boing report" 
 
-    text1 = "Your name is Nate the Great"
-    text2 = "I don't like Marshmallows."
 
     import yaml
     with open('config.yaml', 'r') as file:
         config = yaml.safe_load(file)
-
 
     embedder = OpenAiEmbeddings(API_KEY, BASE_URL, API_VERSION)
     vector_store = SimpleVectorStore(num_vector_dimensions=1536)
@@ -123,6 +125,6 @@ if __name__ == "__main__":
     splitter = SimpleCharacterSplitter(500, 2)
 
     rag = RagPipeline(embedder, vector_store, retriever, llm, splitter, config["retriever"]["k"])
-    rag.add_documents([text1, text2])
+    rag.add_documents(["./documents/name.txt", "./documents/favorite_book.pdf", "./documents/2024-annual-report-boing.pdf"])
     
-    print(rag.query_rag("What is your name", config["llm"]["model"]))
+    print(rag.query_rag(user_query, config["llm"]["model"]))

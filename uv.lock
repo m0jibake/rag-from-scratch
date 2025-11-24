@@ -298,6 +298,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pypdf"
+version = "6.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/42/fd/6b5ff827a5b751a85c1a3a778a0636d1ddbe153fc03954071c431271405c/pypdf-6.3.0.tar.gz", hash = "sha256:d066a2fdf8195e1811ae5a9d5a2f97f5bed0e1e7954297295eadee6357e76c5d", size = 5275038 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d1/26/4ae62da67941784913606da037172d0f14b7ba120442e63a37b257110b2c/pypdf-6.3.0-py3-none-any.whl", hash = "sha256:2d5f9741e851e378908692d571374b3cbd94582fdd1c740fcf7c029ec35ac0e6", size = 328891 },
+]
+
+[[package]]
 name = "python-dotenv"
 version = "1.2.1"
 source = { registry = "https://pypi.org/simple" }
@@ -350,6 +359,7 @@ dependencies = [
     { name = "dotenv" },
     { name = "numpy" },
     { name = "openai" },
+    { name = "pypdf" },
     { name = "pyyaml" },
 ]
 
@@ -358,6 +368,7 @@ requires-dist = [
     { name = "dotenv", specifier = ">=0.9.9" },
     { name = "numpy", specifier = ">=2.3.5" },
     { name = "openai", specifier = ">=2.8.1" },
+    { name = "pypdf", specifier = ">=6.3.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
 ]
 

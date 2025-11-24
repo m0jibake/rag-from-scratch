@@ -1,11 +1,11 @@
 from abc import ABC
 
 class Splitter(ABC):
-    def split():
+    def split(self, text: str) -> list[str]:
         pass
 
 
-class SimpleCharacterSplitter:
+class SimpleCharacterSplitter(Splitter):
 
     def __init__(self, chunk_size: int, overlap: int) -> None:
         self.chunk_size = chunk_size
@@ -16,7 +16,8 @@ class SimpleCharacterSplitter:
         step = self.chunk_size - self.overlap
         for i in range(0, len(text), step):
             chunk = text[i : i + self.chunk_size]
-            chunks.append(chunk)
+            if chunk.strip():
+                chunks.append(chunk)
         return chunks
 
         

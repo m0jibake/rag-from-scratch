@@ -4,8 +4,8 @@ llm:
   temperature: 0.7
 
 chunking:
-  chunk_size: 512
+  chunk_size: 1024
   overlap: 50
 
 retriever: 
-  k: 1
+  k: 5

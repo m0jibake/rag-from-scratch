@@ -3,6 +3,7 @@ import uuid
 import numpy as np
 from numpy.linalg import norm
 import operator
+from src.file_loader import DocumentMetadata
 
 
 
@@ -13,6 +14,7 @@ class Vector(BaseModel):
     vector: np.ndarray
     document_id: str
     text: str
+    metadata: DocumentMetadata
 
 class Document(BaseModel):
     text: str
