@@ -1,4 +1,5 @@
 from abc import ABC
+from src.file_loader import Document
 
 class Splitter(ABC):
     def split(self, text: str) -> list[str]:

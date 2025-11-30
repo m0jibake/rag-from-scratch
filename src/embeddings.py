@@ -16,12 +16,8 @@ text = "hi there"
 
 
 class OpenAiEmbeddings:
-    def __init__(self, api_key: str, azure_endpoint: str, api_version: str) -> None:
-        self.client = AzureOpenAI(
-            api_key = api_key,
-            azure_endpoint= azure_endpoint,
-            api_version = api_version,
-            )
+    def __init__(self, client: AzureOpenAI) -> None:
+        self.client = client
 
     def embed(self, text: str) -> List[np.ndarray]:
         return self.client.embeddings.create(input = [text], model=MODEL ).data[0].embedding
