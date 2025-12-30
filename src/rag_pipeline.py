@@ -9,9 +9,16 @@ from src.splitter import SimpleCharacterSplitter, Splitter
 from src.file_loader import TextFileLoader, Document, FileFactory
 from dotenv import load_dotenv
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Iterator, AsyncIterator
 from pydantic import BaseModel, Field
+import asyncio
 
+
+class StreamEvent(BaseModel):
+    type: str
+    data: dict
+    timestamp: datetime
+    metadata: dict
 
 class PipelineState(BaseModel):
     query: str = Field(..., description="User query")
@@ -38,6 +45,33 @@ class Runnable(ABC):
         """Execute the component with shared state."""
         pass
 
+    async def ainvoke(self, state: PipelineState) -> PipelineState:
+        """Asynchronous non-streaming execution."""
+        import asyncio
+        from concurrent.futures import ThreadPoolExecutor
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.invoke, state)
+
+    def stream(self, state: PipelineState) -> Iterator[StreamEvent]:
+        """Synchronous, streaming execution."""
+        result = self.invoke(state)
+        yield StreamEvent(
+            type="final",
+            data={"state": result},
+            timestamp=datetime.now(),
+            metadata={"component": self.__class__.__name__}
+        )
+
+    async def astream(self, state: PipelineState) -> AsyncIterator[StreamEvent]:
+        """Asynchronous, streaming execution."""
+        result = await self.ainvoke(state)
+        yield StreamEvent(
+            type="final",
+            data={"state": result},
+            timestamp=datetime.now(),
+            metadata={"component": self.__class__.__name__}
+        )
+
     def __or__(self, other: 'Runnable') -> 'Chain':
         """Support pipe operator: runnable1 | runnable2"""
         return Chain([self, other])
@@ -52,6 +86,30 @@ class Chain(Runnable):
         for runnable in self.runnables:
             state = runnable.invoke(state)
         return state
+    
+    async def ainvoke(self, state: PipelineState) -> PipelineState:
+        """Sequential async execution"""
+        for runnable in self.runnables:
+            state = await runnable.ainvoke(state)
+        return state
+    
+    def stream(self, state: PipelineState) -> Iterator[StreamEvent]:
+        """Sequential setreaming, yield all events."""
+        for runnable in self.runnables:
+            for event in runnable.stream(state):
+                yield event
+
+                if event.type == "final":
+                    state = event.data["state"]
+    
+    async def astream(self, state: PipelineState) -> AsyncIterator[StreamEvent]:
+        """Sequential async streaming, yiel all events."""
+        for runnable in self.runnables:
+            async for event in runnable.astream(state):
+                yield event
+
+                if event.type == "final":
+                    state = event.data["state"]
 
 
 
@@ -112,8 +170,7 @@ class LlmRunnable(Runnable):
         try: 
             response = self.client.chat.completions.create(
                 model=self.model,
-                    messages=[{"role": "user", "content": prompt}]
-
+                messages=[{"role": "user", "content": prompt}],
             )
             state.response = response.choices[0].message.content
             state.llm_time = datetime.now().isoformat()
@@ -122,6 +179,37 @@ class LlmRunnable(Runnable):
             state.response= f"Error querying LLM: {str(e)}"
 
         return state
+    
+    async def astream(self, state: PipelineState) -> AsyncIterator[StreamEvent]:
+        """Streaming: yield tokens as they arrive."""
+        cumulative = ""
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": state.prompt}],
+            stream=True,
+        )
+        for chunk in response:
+            if chunk.choices and len(chunk.choices) > 0:
+                token = chunk.choices[0].delta.content
+                if token: 
+                    cumulative += token
+
+                    yield StreamEvent(
+                        type="llm_token",
+                        data={"token": token, "cumulative": cumulative},
+                        timestamp=datetime.now(),
+                        metadata={"component": "LlmRunnable"},
+                    )
+
+        state.response = cumulative
+        state.llm_time = datetime.now()
+        yield StreamEvent(
+            type="final",
+            data={"state": state},
+            timestamp= datetime.now(),
+            metadata={"component": "LlmRunnable"},
+        )
+
     
 class PromptBuilderRunnable(Runnable):
     def __init__(self):
@@ -173,7 +261,7 @@ class RagPipeline:
 
         self.file_factory = FileFactory()
 
-        self._pipeline = (
+        self._pipeline: Chain = (
             RetrieverRunnable(self.vector_store)
             | ContextFormatterRunnable()
             | PromptBuilderRunnable()
@@ -195,6 +283,25 @@ class RagPipeline:
         state = PipelineState(query=user_query, query_as_vector=np.array(self.embedder.embed(user_query)))
         final_state = self._pipeline.invoke(state)
         return final_state
+    
+    async def aquery_rag(self, user_query: str) -> PipelineState:
+        """Async execution (non-streaming, full response at end)."""
+        state = PipelineState(
+            query=user_query,
+            query_as_vector=np.array(self.embedder.embed(user_query))
+        )
+        return await self._pipeline.ainvoke(state)
+    
+    async def stream_query(self, user_query: str) -> AsyncIterator[StreamEvent]:
+        """Async streaming (progressive token yields)."""
+        state = PipelineState(
+            query=user_query,
+            query_as_vector=np.array(self.embedder.embed(user_query))
+        )
+        async for event in self._pipeline.astream(state):
+            yield event
+
+
     
 
 
@@ -235,5 +342,25 @@ if __name__ == "__main__":
 
     rag.add_documents(["./documents/name.txt", "./documents/favorite_book.pdf", "./documents/frodo.pdf"])
     
-    final_state = rag.query_rag(user_query)
-    print(final_state.response)
+    # final_state = rag.query_rag(user_query)
+    # print(final_state.response)
+
+    # ✅ Wrap async code in async function
+    async def test_streaming():
+        print("=" * 60)
+        print("🔄 STREAMING TEST")
+        print("=" * 60)
+        
+        async for event in rag.stream_query(user_query):
+            if event.type == "llm_token":
+                print(event.data["token"], end="", flush=True)
+                await asyncio.sleep(0.05)  # 50ms delay per token as otherwise streaming is not too fast for the eyes
+            elif event.type == "final":
+                print("\n[Complete]")
+                final_state = event.data["state"]
+        return final_state
+    
+    # ✅ Run async function from sync context
+    import asyncio
+    final_state = asyncio.run(test_streaming())
+    print(f"\nFull response: {final_state.response}")
