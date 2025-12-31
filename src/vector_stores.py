@@ -20,9 +20,10 @@ class Document(BaseModel):
     text: str
     document_id: str = Field(default_factory=lambda: str(uuid.uuid1()))
 
-class SimilarityScore(BaseModel):
+class Candidate(BaseModel):
     vector: Vector
-    similarity_score: float
+    relevance_score: float
+    metadata: dict | None = None
     
 class SimpleVectorStore:
 
@@ -48,7 +49,7 @@ class SimpleVectorStore:
     def count(self)-> int:
         return len(self.vectors)
     
-    def search(self, query_vector: np.ndarray, k: int) -> list[SimilarityScore]:
+    def search(self, query_vector: np.ndarray, k: int) -> list[Candidate]:
         if len(query_vector) != self.num_vector_dimensions:
             raise ValueError(f"Query vector must be of length {self.num_vector_dimensions}, but is of length {len(query_vector)}")
 
@@ -62,7 +63,7 @@ class SimpleVectorStore:
         cosine_store.sort(key=lambda x: x[1], reverse=True)
 
         top_k_vectors = cosine_store[:k]
-        return [SimilarityScore(vector=vec[0], similarity_score=vec[1]) for vec in top_k_vectors]
+        return [Candidate(vector=vec[0], similarity_score=vec[1]) for vec in top_k_vectors]
         
 
 

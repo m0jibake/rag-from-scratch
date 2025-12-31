@@ -4,7 +4,7 @@ import uuid
 import os
 from openai import AzureOpenAI
 from src.embeddings import OpenAiEmbeddings
-from src.vector_stores import SimpleVectorStore, Vector, SimilarityScore
+from src.vector_stores import SimpleVectorStore, Vector, Candidate
 from src.splitter import SimpleCharacterSplitter, Splitter
 from src.file_loader import TextFileLoader, Document, FileFactory
 from dotenv import load_dotenv
@@ -22,7 +22,7 @@ class StreamEvent(BaseModel):
 
 class PipelineState(BaseModel):
     query: str = Field(..., description="User query")
-    similarity_chunks: Optional[list] = Field(None, description="Retrieved chunks")
+    candidates: Optional[list[Candidate]] = Field(None, description="Retrieved chunks")
     organized_chunks: Optional[str] = Field(None, description="Formatted context")
     prompt: Optional[str] = Field(None, description="Final prompt")
     response: Optional[str] = Field(None, description="LLM response")
@@ -125,11 +125,11 @@ class RetrieverRunnable(Runnable):
         Retrieve documents matching the query.
         
         Reads from state: "query"
-        Writes to state: "similarity_chunks"
+        Writes to state: "candidates"
         """
         query = state.query_as_vector
-        retrieved_docs = self.vector_store.search(query, k=5)
-        state.similarity_chunks = retrieved_docs
+        retrieved_docs = self.vector_store.search(query, k=20)
+        state.candidates = retrieved_docs
         return state
 
 
@@ -140,12 +140,12 @@ class ContextFormatterRunnable(Runnable):
         pass
 
     def invoke(self, state: PipelineState) -> PipelineState:
-        chunks: list[SimilarityScore] = state.similarity_chunks
+        chunks: list[Candidate] = state.candidates
         organized_chunks = "Here are text chunks sorted in descending order by relevancy to the user prompt:"
         
         for i, chunk in enumerate(chunks):
             page_info = f"Page {chunk.vector.metadata.page_number}" if chunk.vector.metadata.page_number else "N/A"
-            relevancy_pct = f"{chunk.similarity_score * 100:.0f}%"
+            relevancy_pct = f"{chunk.relevance_score * 100:.0f}%"
             organized_chunks += f"Chunk {i} ({chunk.vector.metadata.file_name}, Page: {page_info}, Relevancy: {relevancy_pct}): {chunk.vector.text} \n"
         
         state.organized_chunks = organized_chunks
@@ -238,6 +238,30 @@ class PromptBuilderRunnable(Runnable):
         return state
 
 
+class RerankerRunnable(Runnable):
+    def __init__(self, model_name: str = "cross-encoder/ms-marco-MiniLM-L6-v2" , top_k: int = 5):
+        from sentence_transformers.cross_encoder import CrossEncoder
+        self.model = CrossEncoder(model_name)
+        self.top_k = top_k
+
+    def invoke(self, state: PipelineState) -> PipelineState:
+        
+        cross_encoder_similarity_scores = self.model.predict([[state.query, c.vector.text] for c in state.candidates])
+
+        for candidate, reranking_score in zip(state.candidates, cross_encoder_similarity_scores):
+
+            candidate.relevance_score = float(reranking_score)
+
+        state.candidates.sort(key=lambda x: x.relevance_score, reverse=True)
+    
+        state.candidates = state.candidates[:self.top_k]
+        return state
+
+        
+
+
+
+
     
 class RagPipeline:
     def __init__(self, 
@@ -263,6 +287,7 @@ class RagPipeline:
 
         self._pipeline: Chain = (
             RetrieverRunnable(self.vector_store)
+            | RerankerRunnable()
             | ContextFormatterRunnable()
             | PromptBuilderRunnable()
             | LlmRunnable(client, model)
