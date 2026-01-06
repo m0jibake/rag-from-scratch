@@ -1,0 +1,17 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Debug MCP Client with uv",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.mcp.mcp_client",
+            "args": ["src/mcp/mcp_server.py"],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        }
+    ]
+}
