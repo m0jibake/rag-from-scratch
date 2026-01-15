@@ -63,7 +63,7 @@ class SimpleVectorStore:
         cosine_store.sort(key=lambda x: x[1], reverse=True)
 
         top_k_vectors = cosine_store[:k]
-        return [Candidate(vector=vec[0], similarity_score=vec[1]) for vec in top_k_vectors]
+        return [Candidate(vector=vec[0], relevance_score=vec[1]) for vec in top_k_vectors]
         
 
 

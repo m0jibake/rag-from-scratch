@@ -12,3 +12,4 @@ wheels/
 .env
 src/playground.py
 src/rag-from-scratch.ipynb
+src/mcp/playground.py

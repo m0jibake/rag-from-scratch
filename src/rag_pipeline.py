@@ -6,7 +6,7 @@ from openai import AzureOpenAI
 from src.embeddings import OpenAiEmbeddings
 from src.vector_stores import SimpleVectorStore, Vector, Candidate
 from src.splitter import SimpleCharacterSplitter, Splitter
-from src.file_loader import TextFileLoader, Document, FileFactory
+from src.file_loader import FileFactory
 from dotenv import load_dotenv
 from abc import ABC, abstractmethod
 from typing import Optional, Iterator, AsyncIterator

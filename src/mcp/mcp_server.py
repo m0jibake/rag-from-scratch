@@ -31,38 +31,35 @@ async def get_coordinates(city: str) -> dict:
     except Exception as e:
         return {"error": f"{type(e).__name__}: {e}"}
 
+
 @mcp.tool()
 async def get_forecast(city: str) -> dict:
+    """
+    A MCP tool to get the weather forecast.
+    
+    :param city: Description
+    :type city: str
+    :return: Description
+    :rtype: dict
+    """
+
     import requests
 
-
     coordinates_result = await get_coordinates(city)
-
-
     url = (
         "https://api.open-meteo.com/v1/forecast"
         f"?latitude={coordinates_result.get('latitude')}&longitude={coordinates_result.get('longitude')}"
         "&timezone=Europe/Berlin"
-        "&forecast_days=1"
+        "&forecast_days=2"
         "&hourly=temperature_2m,relative_humidity_2m,precipitation,rain,snowfall,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m"
         "&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_sum,rain_sum,snowfall_sum,wind_speed_10m_max"
     )
 
     try:
-        import certifi
-        import sys
-        import os
-        # Debug: print environment info
-        print(f"REQUESTS_CA_BUNDLE: {os.environ.get('REQUESTS_CA_BUNDLE', 'not set')}", file=sys.stderr)
-        print(f"SSL_CERT_FILE: {os.environ.get('SSL_CERT_FILE', 'not set')}", file=sys.stderr)
-        print(f"certifi location: {certifi.where()}", file=sys.stderr)
-        
         response = requests.get(url, timeout=30, verify=False)
         return response.text
     except Exception as e:
         return f"Error: {type(e).__name__}: {e}"
-
-    return response.text
 
 
 def main():
